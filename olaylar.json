@@ -1,5 +1,5 @@
 [
-{"yil": "MÖ 10.000", "olay": "Buzul Çağı bitti. Bereketli Hilal'de (Mezopotamya) tarım başladı; yerleşik hayata geçildi."},
+  {"yil": "MÖ 10.000", "olay": "Buzul Çağı bitti. Bereketli Hilal'de (Mezopotamya) tarım başladı; yerleşik hayata geçildi."},
   {"yil": "MÖ 9500", "olay": "GÖBEKLİTEPE: Dünyanın bilinen en eski kült yapısı (tapınak) inşa edildi."},
   {"yil": "MÖ 8000", "olay": "Eriha (Jericho) şehri kuruldu; dünyanın en eski sürekli yerleşim yerlerinden biri."},
   {"yil": "MÖ 7500", "olay": "ÇATALHÖYÜK: Anadolu'da ilk organize şehir yerleşimi ve duvar sanatı gelişti."},
@@ -1978,13 +1978,7 @@
   {"yil": "1997", "olay": "Prenses Diana trafik kazasında öldü. Hong Kong Çin'e devredildi. Pathfindfer aracı Mars'a indi. Harry Potter ilk kitap basıldı."},
   {"yil": "1998", "olay": "GOOGLE KURULDU. Kuzey İrlanda'da Hayırlı Cuma Anlaşması. Viagra piyasaya çıktı. Uluslararası Uzay İstasyonu inşası başladı."},
   {"yil": "1999", "olay": "MARMARA DEPREMİ (17 Ağustos): Türkiye sarsıldı. Euro para birimi tanıtıldı. NATO, Kosova'ya müdahale etti. Nüfus 6 milyara ulaştı."},
-  {"yil": "2000", "olay": "Yüzyıl biterken: Y2K paniği yaşandı ancak sorun çıkmadı. İnsan Genom Projesi ilk taslağı tamamladı. İnternet balonu (Dot-com) patladı."}
-Ve nihayet, içinde yaşadığımız, tarihin en hızlı dijitalleştiği ve küresel dengelerin kökten sarsıldığı MS 2001 - MS 2026 (Gelecekten bir bakışla) dönemine geliyoruz. Bu çeyrek asır; akıllı telefonların cebimize girmesi, yapay zekanın yükselişi ve pandemilerin dünyayı durdurabildiği bir "Hız Çağı"dır.
-
-İşte 11 Eylül'den Mars görevlerine, sosyal medya devriminden yapay zeka patlamasına 21. asrın ilk çeyreği:
-
-JSON
-[
+  {"yil": "2000", "olay": "Yüzyıl biterken: Y2K paniği yaşandı ancak sorun çıkmadı. İnsan Genom Projesi ilk taslağı tamamladı. İnternet balonu (Dot-com) patladı."},
   {"yil": "2001", "olay": "11 EYLÜL SALDIRILARI: ABD'de İkiz Kuleler vuruldu; dünya 'Terörle Mücadele' dönemine girdi. Wikipedia yayına başladı. Apple, iPod'u tanıttı."},
   {"yil": "2002", "olay": "EURO nakit olarak dolaşıma girdi. AK PARTİ Türkiye'de iktidara geldi. Afganistan'da Taliban sonrası yeni hükümet kuruldu."},
   {"yil": "2003", "olay": "IRAK İŞGALİ: ABD ve müttefikleri Saddam Hüseyin'i devirdi. İnsan Genom Projesi tamamlandı. Tesla Motors kuruldu."},
