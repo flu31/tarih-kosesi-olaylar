@@ -12,6 +12,7 @@ import tempfile
 import threading
 import urllib.request
 import winsound
+import subprocess
 import pprint
 from datetime import date, datetime
 
@@ -20,7 +21,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QSystemTrayIcon, QMenu, QAction,
     QCheckBox, QSlider, QMessageBox, QButtonGroup, QStackedWidget
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import (
     QFont, QColor, QPainter, QPainterPath,
     QCursor, QIcon, QPixmap, QPen
@@ -30,14 +31,16 @@ QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
 
 APP_NAME     = "TarihKöşesi"
-APP_VERSION  = "1.0"
+APP_VERSION  = "1.0.1"
 WIDGET_W     = 320
 WIDGET_H     = 185
 SERIT_W      = 4
 KUTLAMA_MOD  = 100
 GORULDU_SAVE = 10
 
-OLAYLAR_URL  = "https://raw.githubusercontent.com/flu31/tarih-kosesi-olaylar/refs/heads/main/olaylar.json"
+OLAYLAR_URL   = "https://raw.githubusercontent.com/flu31/tarih-kosesi-olaylar/refs/heads/main/olaylar.json"
+VERSION_URL   = "https://raw.githubusercontent.com/flu31/tarih-kosesi-olaylar/main/version.json"
+RELEASE_URL   = "https://github.com/flu31/tarih-kosesi-olaylar/releases/latest/download/TarihKosesi.exe"
 SES_DOSYASI  = r"C:\Windows\Media\tada.wav"
 IPC_FILE     = os.path.join(tempfile.gettempdir(), "tarih_kosesi_ipc.txt")
 
@@ -187,7 +190,8 @@ def make_tray_icon(acc, bg):
 
 
 def make_pin_icon(locked):
-    px = QPixmap(14, 14)
+    """İğne ikonu — yuvarlak baş, ince çubuk. Kilitliyken baş dolu, açıkken boş."""
+    px = QPixmap(10, 14)
     px.fill(Qt.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.Antialiasing)
@@ -196,19 +200,16 @@ def make_pin_icon(locked):
     pen.setWidth(1)
     pen.setCapStyle(Qt.RoundCap)
     p.setPen(pen)
+
     if locked:
         p.setBrush(color)
-        p.drawEllipse(4, 0, 6, 6)
-        p.drawRect(6, 6, 2, 6)
-        p.drawLine(7, 12, 7, 13)
     else:
         p.setBrush(Qt.NoBrush)
-        p.drawEllipse(4, 0, 6, 6)
-        p.drawLine(6, 6, 8, 6)
-        p.drawLine(6, 6, 6, 12)
-        p.drawLine(8, 6, 8, 12)
-        p.drawLine(6, 12, 8, 12)
-        p.drawLine(7, 12, 7, 13)
+    p.drawEllipse(2, 0, 6, 6)
+
+    p.setBrush(color)
+    p.drawLine(5, 6, 5, 13)
+
     p.end()
     return QIcon(px)
 
@@ -270,6 +271,39 @@ def yerel_olay_sayisi():
                     and "yil" in e and "olay" in e and e["yil"] and e["olay"]])
     except Exception:
         return 0
+
+
+def guncelleme_kontrol(widget):
+    """GitHub'daki version.json'ı kontrol eder, yeni sürüm varsa sinyal gönderir."""
+    def _kontrol():
+        try:
+            req = urllib.request.Request(
+                VERSION_URL,
+                headers={"User-Agent": "TarihKosesi/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            uzak_versiyon = data.get("version", "0.0.0")
+            print(f"[GUNCELLEME] Uzak: {uzak_versiyon}, Yerel: {APP_VERSION}")
+            if uzak_versiyon != APP_VERSION:
+                widget.sig_guncelleme_var.emit(uzak_versiyon)
+        except Exception as e:
+            print(f"Sürüm kontrol hatası: {e}")
+    threading.Thread(target=_kontrol, daemon=True).start()
+
+
+def guncelleme_baslat(exe_yolu):
+    """Updater'ı başlatıp uygulamayı kapatır."""
+    updater_yolu = os.path.join(os.path.dirname(exe_yolu), "updater.exe")
+    if not os.path.exists(updater_yolu):
+        # Geliştirme modunda updater.py kullan
+        updater_yolu = os.path.join(get_bundled(), "updater.exe")
+    if not os.path.exists(updater_yolu):
+        import webbrowser
+        webbrowser.open("https://github.com/flu31/tarih-kosesi-olaylar/releases/latest")
+        return
+    subprocess.Popen([updater_yolu, exe_yolu, RELEASE_URL])
+    QApplication.quit()
 
 
 def guncelle_olaylar(on_done=None, force=False):
@@ -399,6 +433,7 @@ class DataManager:
         self._base    = get_base()
         self.events   = self._load_events()
         self.settings = self._load_settings()
+        self.ilk_acilis = self.settings.get("ilk_kullanim") is None
         self._ilk_kullanim_kaydet()
 
     def _load_events(self):
@@ -554,9 +589,138 @@ class SectionBox(QWidget):
         p.drawRoundedRect(0, 0, self.width()-1, self.height()-1, self._radius, self._radius)
 
 
+# ── WelcomeWindow ─────────────────────────────────────────────────────────────
+
+class WelcomeWindow(QWidget):
+
+    def __init__(self, dm, on_close):
+        super().__init__()
+        self._dm       = dm
+        self._on_close = on_close
+        self._drag_pos = None
+        self._bg_color = QColor(26, 21, 16)
+
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(360, 380)
+        self._build()
+
+    def _build(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        inner = QWidget(self)
+        inner.setAttribute(Qt.WA_TranslucentBackground)
+        lay = QVBoxLayout(inner)
+        lay.setContentsMargins(28, 28, 28, 24)
+        lay.setSpacing(0)
+
+        # Başlık
+        title = QLabel("Tarih Köşesi'ne Hoş Geldiniz 👋")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title.setStyleSheet("color: #c8a97a; line-height: 1.3;")
+        title.setWordWrap(True)
+        lay.addWidget(title)
+        lay.addSpacing(6)
+
+        sub = QLabel("Her saat başı masaüstünüzde yeni bir tarihi olay.")
+        sub.setFont(QFont("Segoe UI", 9))
+        sub.setStyleSheet("color: #8a8070;")
+        sub.setWordWrap(True)
+        lay.addWidget(sub)
+        lay.addSpacing(20)
+
+        # İpuçları
+        tips = [
+            ("🖱️  Sürükle",     "Widget'ı masaüstünde istediğin yere taşıyabilirsin."),
+            ("📌  İğne butonu", "İğneye basarak widget'ı sabit bir konuma kilitleyebilirsin."),
+            ("⚙️  Ayarlar",     "≡ butonuyla tema, yazı tipi ve ses ayarlarını değiştirebilirsin."),
+            ("📋  Kopyala",     "Olay metnine sağ tıklayarak içeriği panoya kopyalayabilirsin."),
+        ]
+
+        for icon_title, desc in tips:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+
+            dot = QWidget()
+            dot.setFixedSize(8, 8)
+            dot.setStyleSheet("background: #c8a97a; border-radius: 4px;")
+
+            text_col = QVBoxLayout()
+            text_col.setSpacing(1)
+
+            t = QLabel(icon_title)
+            t.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            t.setStyleSheet("color: #f0ece0;")
+
+            d = QLabel(desc)
+            d.setFont(QFont("Segoe UI", 8))
+            d.setStyleSheet("color: #8a8070;")
+            d.setWordWrap(True)
+
+            text_col.addWidget(t)
+            text_col.addWidget(d)
+
+            row.addWidget(dot, 0, Qt.AlignTop | Qt.AlignHCenter)
+            row.addLayout(text_col, 1)
+            lay.addLayout(row)
+            lay.addSpacing(10)
+
+        lay.addSpacing(10)
+
+        # Buton
+        btn = QPushButton("Başla →")
+        btn.setFixedHeight(38)
+        btn.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        btn.setCursor(QCursor(Qt.PointingHandCursor))
+        btn.setStyleSheet("""
+            QPushButton {
+                background: #c8a97a; color: #0e0c09;
+                border-radius: 4px; border: none;
+            }
+            QPushButton:hover { background: #e8cfa0; }
+        """)
+        btn.clicked.connect(self._kapat)
+        lay.addWidget(btn)
+
+        root.addWidget(inner)
+
+    def _kapat(self):
+        self.hide()
+        self._on_close()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, self.width(), self.height(), 14, 14)
+        p.fillPath(path, self._bg_color)
+        pen = QPen(QColor(200, 169, 122, 60))
+        pen.setWidth(1)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(0, 0, self.width()-1, self.height()-1, 14, 14)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self._drag_pos = e.globalPos() - self.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, e):
+        if e.buttons() == Qt.LeftButton and self._drag_pos:
+            self.move(e.globalPos() - self._drag_pos)
+
+    def mouseReleaseEvent(self, _):
+        self._drag_pos = None
+
+
+
 # ── SettingsWindow ────────────────────────────────────────────────────────────
 
 class SettingsWindow(QWidget):
+
+    sig_guncel        = pyqtSignal()
+    sig_guncelleme    = pyqtSignal(str)
+    sig_hata          = pyqtSignal()
 
     def __init__(self, dm, on_change, get_yil):
         super().__init__()
@@ -573,6 +737,9 @@ class SettingsWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(300, 380)
         self._build()
+        self.sig_guncel.connect(self._guncel_slot)
+        self.sig_guncelleme.connect(self._kontrol_bitti_slot)
+        self.sig_hata.connect(self._guncelleme_hata)
         self.refresh_theme()
 
     def _build(self):
@@ -689,13 +856,14 @@ class SettingsWindow(QWidget):
         self._sections.append(s_baslangic)
 
         s_ses = SectionBox()
-        self._chk_ses, _ = self._chk_row_w(
-            s_ses, "Olay sesi (tada.wav)", self._dm.get("ses_acik"), self._on_ses_acik)
+        self._chk_ses, ses_lbl = self._chk_row_w(
+            s_ses, "Olay sesi", self._dm.get("ses_acik"), self._on_ses_acik)
+        ses_lbl.setText("Olay sesi (sistem ses seviyesini kullanır)")
         self._btn_ses_test = QPushButton("▶ Sesi test et")
         self._btn_ses_test.setFixedHeight(24)
         self._btn_ses_test.setFont(QFont("Segoe UI", 9))
         self._btn_ses_test.setCursor(QCursor(Qt.PointingHandCursor))
-        self._btn_ses_test.clicked.connect(cal_ses)
+        self._btn_ses_test.clicked.connect(self._ses_test)
         s_ses.add(self._btn_ses_test)
         dlay.addWidget(s_ses)
         self._sections.append(s_ses)
@@ -728,6 +896,32 @@ class SettingsWindow(QWidget):
         s_versiyon.add(self._lbl_versiyon)
         hlay.addWidget(s_versiyon)
         self._sections.append(s_versiyon)
+
+        s_linkler = SectionBox()
+        self._btn_github = QPushButton("GitHub →")
+        self._btn_github.setFixedHeight(26)
+        self._btn_github.setFont(QFont("Segoe UI", 9))
+        self._btn_github.setCursor(QCursor(Qt.PointingHandCursor))
+        self._btn_github.clicked.connect(lambda: __import__("webbrowser").open("https://github.com/flu31/tarih-kosesi-olaylar"))
+        s_linkler.add(self._btn_github)
+        self._btn_website = QPushButton("Web Sitesi →")
+        self._btn_website.setFixedHeight(26)
+        self._btn_website.setFont(QFont("Segoe UI", 9))
+        self._btn_website.setCursor(QCursor(Qt.PointingHandCursor))
+        self._btn_website.clicked.connect(lambda: __import__("webbrowser").open("https://flu31.github.io/tarih-kosesi-olaylar"))
+        s_linkler.add(self._btn_website)
+        hlay.addWidget(s_linkler)
+        self._sections.append(s_linkler)
+
+        s_guncelle = SectionBox()
+        self._btn_guncelle = QPushButton("Güncelleme Kontrol Et")
+        self._btn_guncelle.setFixedHeight(26)
+        self._btn_guncelle.setFont(QFont("Segoe UI", 9))
+        self._btn_guncelle.setCursor(QCursor(Qt.PointingHandCursor))
+        self._btn_guncelle.clicked.connect(self._manuel_guncelleme_kontrol)
+        s_guncelle.add(self._btn_guncelle)
+        hlay.addWidget(s_guncelle)
+        self._sections.append(s_guncelle)
 
         s_sifirla = SectionBox()
         self._btn_sifirla = QPushButton("Ayarları Sıfırla")
@@ -874,8 +1068,61 @@ class SettingsWindow(QWidget):
     def _on_goster(self, state):
         self._dm.set("baslangic_goster", state == Qt.Checked)
 
+    def _ses_test(self):
+        """Sesi çalar, ses süresi boyunca butonu devre dışı bırakır."""
+        self._btn_ses_test.setEnabled(False)
+        cal_ses()
+        QTimer.singleShot(3000, lambda: self._btn_ses_test.setEnabled(True))
+
     def _on_ses_acik(self, state):
         self._dm.set("ses_acik", state == Qt.Checked)
+
+    def _manuel_guncelleme_kontrol(self):
+        self._btn_guncelle.setEnabled(False)
+        self._btn_guncelle.setText("Kontrol ediliyor...")
+        # Kontrol et
+        def _kontrol():
+            try:
+                print(f"[GUNCELLEME] Kontrol başlıyor: {VERSION_URL}")
+                req = urllib.request.Request(VERSION_URL, headers={"User-Agent": "TarihKosesi/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw = resp.read().decode("utf-8")
+                print(f"[GUNCELLEME] Yanıt: {raw}")
+                data = json.loads(raw)
+                uzak = data.get("version", "0.0.0")
+                print(f"[GUNCELLEME] Uzak: {uzak}, Yerel: {APP_VERSION}")
+                if uzak != APP_VERSION:
+                    self.sig_guncelleme.emit(uzak)
+                else:
+                    self.sig_guncel.emit()
+            except Exception as e:
+                print(f"[GUNCELLEME] Hata: {e}")
+                self.sig_hata.emit()
+        threading.Thread(target=_kontrol, daemon=True).start()
+
+    def _guncel_slot(self):
+        self._btn_guncelle.setEnabled(True)
+        self._btn_guncelle.setText("Güncelleme Kontrol Et")
+        self.raise_()
+        self.activateWindow()
+        QMessageBox.information(self, "Güncelleme", f"Tarih Köşesi güncel! ({APP_VERSION})")
+
+    def _kontrol_bitti_slot(self, yeni_versiyon):
+        self._btn_guncelle.setEnabled(True)
+        self._btn_guncelle.setText("Güncelleme Kontrol Et")
+        cevap = QMessageBox.question(
+            self, "Güncelleme Mevcut",
+            f"Tarih Köşesi {yeni_versiyon} sürümü mevcut! Şimdi güncellemek ister misiniz?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if cevap == QMessageBox.Yes:
+            exe_yolu = sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__)
+            guncelleme_baslat(exe_yolu)
+
+    def _guncelleme_hata(self):
+        self._btn_guncelle.setEnabled(True)
+        self._btn_guncelle.setText("Güncelleme Kontrol Et")
+        QMessageBox.warning(self, "Hata", "Sunucuya bağlanılamadı.")
 
     def _sifirla(self):
         cevap = QMessageBox.question(
@@ -946,12 +1193,30 @@ class SettingsWindow(QWidget):
             }}
             QPushButton:hover {{ background: #e0707022; }}
         """)
+        link_style = f"""
+            QPushButton {{
+                background: transparent; color: {acc};
+                border-radius: 4px; border: 1px solid {acc}55;
+                text-align: left; padding-left: 4px;
+            }}
+            QPushButton:hover {{ background: {acc}22; }}
+        """
+        self._btn_github.setStyleSheet(link_style)
+        self._btn_website.setStyleSheet(link_style)
         self._btn_ses_test.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {acc};
                 border-radius: 4px; border: 1px solid {acc}55;
             }}
             QPushButton:hover {{ background: {acc}22; }}
+        """)
+        self._btn_guncelle.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {c['text']};
+                border-radius: 4px; border: 1px solid {c['dim']}55;
+            }}
+            QPushButton:hover {{ background: {c['dim']}22; }}
+            QPushButton:disabled {{ color: {c['dim']}; }}
         """)
         for sec in self._sections:
             sec.set_colors(c)
@@ -1026,6 +1291,8 @@ class SettingsWindow(QWidget):
 
 class HistoryWidget(QWidget):
 
+    sig_guncelleme_var = pyqtSignal(str)
+
     def __init__(self, dm):
         super().__init__()
         self._dm              = dm
@@ -1042,6 +1309,7 @@ class HistoryWidget(QWidget):
         self._pin_yapildi     = False
         self._gizli_kullanici = not dm.get("baslangic_goster")
 
+        self.sig_guncelleme_var.connect(self._on_guncelleme_var)
         self._init_window()
         self._build_ui()
         self._settings_win = SettingsWindow(
@@ -1050,6 +1318,10 @@ class HistoryWidget(QWidget):
         self._init_tray()
         self._init_timers()
         self._restore_or_next()
+
+        # İlk açılışta hoş geldin penceresi
+        if dm.ilk_acilis:
+            QTimer.singleShot(500, self._show_welcome)
 
     def _init_window(self):
         self.setWindowFlags(
@@ -1163,6 +1435,7 @@ class HistoryWidget(QWidget):
         self._w_olay.setContextMenuPolicy(Qt.CustomContextMenu)
         self._w_olay.customContextMenuRequested.connect(self._olay_context_menu)
 
+
         bot = QHBoxLayout()
         self._w_timer = QLabel("")
         self._w_timer.setFont(QFont(fn, 8))
@@ -1186,6 +1459,15 @@ class HistoryWidget(QWidget):
         self._lay.addWidget(self._w_yil)
         self._lay.addWidget(self._w_olay, 1)
         self._lay.addLayout(bot)
+
+    def _show_welcome(self):
+        geo = best_screen(self).availableGeometry()
+        self._welcome_win = WelcomeWindow(self._dm, lambda: None)
+        self._welcome_win.move(
+            geo.center().x() - self._welcome_win.width() // 2,
+            geo.center().y() - self._welcome_win.height() // 2,
+        )
+        self._welcome_win.show()
 
     def _kapat_kullanici(self):
         self._gizli_kullanici = True
@@ -1251,9 +1533,12 @@ class HistoryWidget(QWidget):
 
     def _update_next_tooltip(self):
         if self._deck:
-            self._w_next.setToolTip(f"Sonraki: {self._deck[-1]['yil']}")
+            sonraki = self._deck[-1]["yil"]
+            self._w_next.setToolTip(f"Sıradaki olay: {sonraki}")
+            self._w_next.setText(f"→ {sonraki}")
         else:
             self._w_next.setToolTip("")
+            self._w_next.setText("→")
 
     def _restore_or_next(self):
         idx          = self._dm.get("mevcut_olay_idx")
@@ -1462,6 +1747,18 @@ class HistoryWidget(QWidget):
         else:
             print(f"[DEBUG] Bilinmeyen: {cmd}")
 
+    def _on_guncelleme_var(self, yeni_versiyon):
+        """Yeni sürüm varsa kullanıcıya sorar."""
+        cevap = QMessageBox.question(
+            None,
+            "Güncelleme Mevcut",
+            f"Tarih Köşesi {yeni_versiyon} surumu mevcut! Su an {APP_VERSION} kullaniyorsunuz. Guncellemek ister misiniz?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if cevap == QMessageBox.Yes:
+            exe_yolu = sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__)
+            guncelleme_baslat(exe_yolu)
+
     def _on_events_updated(self, new_events):
         self._dm.events = new_events
         self._deck = list(new_events)
@@ -1603,6 +1900,15 @@ class HistoryWidget(QWidget):
 # ── Giriş ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Önceki güncelleme kalıntılarını temizle
+    try:
+        if getattr(sys, "frozen", False):
+            bak = sys.executable + ".bak"
+            if os.path.exists(bak):
+                os.remove(bak)
+    except Exception:
+        pass
+
     if not check_single_instance():
         QMessageBox.information(None, "Tarih Köşesi",
             "Tarih Köşesi zaten çalışıyor!\nSistem tepsisine bakın.")
@@ -1614,6 +1920,7 @@ if __name__ == "__main__":
     w  = HistoryWidget(dm)
 
     guncelle_olaylar(on_done=w._on_events_updated)
+    guncelleme_kontrol(w)
 
     if dm.get("baslangic_goster"):
         w.show()
