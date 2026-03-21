@@ -1,0 +1,6 @@
+{"version": "1.0.0"}
+```
+
+2. **`updater.py`'yi EXE'ye derle:**
+```
+python -m PyInstaller --onefile --noconsole updater.py
