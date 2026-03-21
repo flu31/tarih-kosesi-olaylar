@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarih Köşesi — Masaüstü Widget</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0c09;
+    --surface: #1a1510;
+    --gold: #c8a97a;
+    --gold-light: #e8cfa0;
+    --text: #f0ece0;
+    --muted: #8a8070;
+    --border: rgba(200,169,122,0.2);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── Grained texture overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* ── Nav ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.2rem 3rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(14,12,9,0.85);
+    backdrop-filter: blur(12px);
+  }
+
+  .nav-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    color: var(--gold);
+    letter-spacing: 0.05em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--gold); }
+
+  /* ── Hero ── */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 8rem 2rem 4rem;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(200,169,122,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight: 700;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.4s forwards;
+  }
+
+  .hero-title em {
+    font-style: italic;
+    color: var(--gold);
+  }
+
+  .hero-sub {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 480px;
+    margin-bottom: 3rem;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.6s forwards;
+  }
+
+  .hero-cta {
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.8s forwards;
+  }
+
+  .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--gold);
+    color: #0e0c09;
+    text-decoration: none;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 1rem 2rem;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+    transition: background 0.2s, transform 0.15s;
+  }
+
+  .btn-download:hover {
+    background: var(--gold-light);
+    transform: translateY(-2px);
+  }
+
+  .btn-download svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .hero-note {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    opacity: 0;
+    animation: fadeUp 0.8s ease 1s forwards;
+  }
+
+  /* ── Widget mockup ── */
+  .widget-preview {
+    margin-top: 5rem;
+    position: relative;
+    opacity: 0;
+    animation: fadeUp 1s ease 1.1s forwards;
+  }
+
+  .widget-frame {
+    width: 320px;
+    height: 185px;
+    background: #2d1a08;
+    border-radius: 14px;
+    border: 1px solid rgba(200,169,122,0.25);
+    padding: 14px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+
+  .widget-frame::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: #c0603a;
+    border-radius: 14px 0 0 14px;
+  }
+
+  .w-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .w-title {
+    font-size: 10px;
+    font-weight: 500;
+    color: #c0603a;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .w-btns { display: flex; gap: 4px; }
+  .w-btn {
+    width: 10px; height: 10px;
+    background: rgba(200,169,122,0.3);
+    border-radius: 50%;
+  }
+
+  .w-cag {
+    font-size: 7px;
+    color: #8a8070;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .w-yil {
+    font-size: 16px;
+    font-weight: 700;
+    color: #c0603a;
+    margin-bottom: 4px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .w-olay {
+    font-size: 9px;
+    color: #f0ece0;
+    line-height: 1.5;
+    flex: 1;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .w-bot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+  }
+
+  .w-timer { font-size: 8px; color: #8a8070; font-family: 'DM Sans', sans-serif; }
+  .w-next { font-size: 8px; color: #c0603a; font-family: 'DM Sans', sans-serif; }
+
+  /* ── Features ── */
+  .section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+  }
+
+  .section-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 4vw, 3rem);
+    margin-bottom: 3rem;
+    line-height: 1.2;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5px;
+    background: var(--border);
+  }
+
+  .feature {
+    background: var(--surface);
+    padding: 2rem;
+    transition: background 0.2s;
+  }
+
+  .feature:hover { background: #1f1a14; }
+
+  .feature-icon {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .feature-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+    color: var(--gold-light);
+  }
+
+  .feature-desc {
+    font-size: 0.875rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── Ages ── */
+  .ages {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--border);
+    margin-top: 3rem;
+  }
+
+  .age {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--surface);
+  }
+
+  .age-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .age-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    flex: 1;
+  }
+
+  .age-range {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* ── Install ── */
+  .install-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 3rem;
+    text-align: center;
+    margin-top: 3rem;
+  }
+
+  .install-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+
+  .install-sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 2rem;
+  }
+
+  .install-req {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .req-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .req-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2rem 3rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  footer a {
+    color: var(--gold);
+    text-decoration: none;
+  }
+
+  footer a:hover { color: var(--gold-light); }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    nav { padding: 1rem 1.5rem; }
+    .nav-links { display: none; }
+    footer { flex-direction: column; text-align: center; }
+    .install-req { flex-direction: column; align-items: center; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">📅 Tarih Köşesi</div>
+  <ul class="nav-links">
+    <li><a href="#ozellikler">Özellikler</a></li>
+    <li><a href="#caglar">Çağlar</a></li>
+    <li><a href="#indir">İndir</a></li>
+    <li><a href="https://github.com/flu31/tarih-kosesi-olaylar" target="_blank">GitHub</a></li>
+  </ul>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <p class="hero-eyebrow">Windows Masaüstü Widget'ı</p>
+  <h1 class="hero-title">Her saat<br><em>bir tarih</em></h1>
+  <p class="hero-sub">Masaüstünüzde her saat başı yeni bir tarihi olay — 2000'den fazla olayla geçmişi keşfedin.</p>
+  <div class="hero-cta">
+    <a href="https://github.com/flu31/tarih-kosesi-olaylar/releases/download/v1.0.0/TarihKosesi.exe" class="btn-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      Ücretsiz İndir
+    </a>
+  </div>
+  <p class="hero-note">Windows 10 / 11 — Ücretsiz ve açık kaynak</p>
+
+  <!-- Widget mockup -->
+  <div class="widget-preview">
+    <div class="widget-frame">
+      <div class="w-top">
+        <span class="w-title">📅 Tarih Köşesi</span>
+        <div class="w-btns">
+          <div class="w-btn"></div>
+          <div class="w-btn"></div>
+          <div class="w-btn"></div>
+        </div>
+      </div>
+      <div class="w-cag">Yeni Çağ</div>
+      <div class="w-yil">1453</div>
+      <div class="w-olay">Osmanlı Sultan II. Mehmed İstanbul'u fethetti. Bin yıllık Bizans İmparatorluğu sona erdi.</div>
+      <div class="w-bot">
+        <span class="w-timer">59:42</span>
+        <span class="w-next">→ Sıradaki olay</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Özellikler -->
+<section class="section" id="ozellikler">
+  <p class="section-label">Özellikler</p>
+  <h2 class="section-title">Sade ama güçlü</h2>
+
+  <div class="features-grid">
+    <div class="feature">
+      <div class="feature-icon">🕐</div>
+      <div class="feature-title">Saat Başı Güncelleme</div>
+      <div class="feature-desc">Her saat başında otomatik olarak yeni bir tarihi olay gelir. Sistem saatiyle tam senkron.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🎨</div>
+      <div class="feature-title">Çağa Göre Renk</div>
+      <div class="feature-desc">Olayın hangi çağa ait olduğuna göre widget rengi değişir. Prehistorik'ten Yakın Çağ'a beş farklı tema.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🖥️</div>
+      <div class="feature-title">Masaüstüne Gömülü</div>
+      <div class="feature-desc">Diğer pencerelerin arkasında kalır, masaüstünün parçası gibi durur. Rainmeter tarzı.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">📚</div>
+      <div class="feature-title">2000+ Olay</div>
+      <div class="feature-desc">Prehistorik dönemden günümüze binlerce tarihi olay. GitHub üzerinden sürekli güncellenir.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔔</div>
+      <div class="feature-title">Ses Bildirimi</div>
+      <div class="feature-desc">Her yeni olay geldiğinde isteğe bağlı ses bildirimi. Ayarlardan açılıp kapatılabilir.</div>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⚙️</div>
+      <div class="feature-title">Kişiselleştirme</div>
+      <div class="feature-desc">Opaklık, köşe stili, yazı tipi, tema ve daha fazlasını ayarlayın.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Çağlar -->
+<section class="section" id="caglar">
+  <p class="section-label">Renk Sistemi</p>
+  <h2 class="section-title">Beş çağ, <em>beş renk</em></h2>
+
+  <div class="ages">
+    <div class="age">
+      <div class="age-dot" style="background:#c8a97a"></div>
+      <span class="age-name">Prehistorik</span>
+      <span class="age-range">MÖ 3200 öncesi</span>
+    </div>
+    <div class="age">
+      <div class="age-dot" style="background:#f0c040"></div>
+      <span class="age-name">İlk Çağ</span>
+      <span class="age-range">MÖ 3200 — MS 375</span>
+    </div>
+    <div class="age">
+      <div class="age-dot" style="background:#9b6bb5"></div>
+      <span class="age-name">Orta Çağ</span>
+      <span class="age-range">375 — 1453</span>
+    </div>
+    <div class="age">
+      <div class="age-dot" style="background:#c0603a"></div>
+      <span class="age-name">Yeni Çağ</span>
+      <span class="age-range">1453 — 1789</span>
+    </div>
+    <div class="age">
+      <div class="age-dot" style="background:#5b8db8"></div>
+      <span class="age-name">Yakın Çağ</span>
+      <span class="age-range">1789 — günümüz</span>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- İndir -->
+<section class="section" id="indir">
+  <div class="install-box">
+    <h2 class="install-title">Hemen başlayın</h2>
+    <p class="install-sub">Kurulum gerektirmez. İndirin ve çalıştırın.</p>
+    <a href="https://github.com/flu31/tarih-kosesi-olaylar/releases/download/v1.0.0/TarihKosesi.exe" class="btn-download">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      TarihKosesi.exe — Ücretsiz İndir
+    </a>
+    <div class="install-req">
+      <div class="req-item"><div class="req-dot"></div>Windows 10 / 11</div>
+      <div class="req-item"><div class="req-dot"></div>64-bit</div>
+      <div class="req-item"><div class="req-dot"></div>Açık kaynak — MIT Lisansı</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>© 2025 Tarih Köşesi</span>
+  <span>
+    <a href="https://github.com/flu31/tarih-kosesi-olaylar" target="_blank">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/flu31/tarih-kosesi-olaylar/blob/main/LICENSE" target="_blank">MIT Lisansı</a>
+  </span>
+</footer>
+
+</body>
+</html>
